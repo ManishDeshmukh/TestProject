@@ -1,0 +1,22 @@
+[project]
+name = "liberty-lint"
+version = "0.1.0"
+description = "Parse Synopsys Liberty (.lib) standard-cell files into a database and lint NLDM/CCS timing tables."
+requires-python = ">=3.9"
+dependencies = [
+    "liberty-parser>=0.0.29",
+    "SQLAlchemy>=2.0",
+]
+
+[project.scripts]
+liberty-lint = "liberty_lint.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["liberty_lint*"]

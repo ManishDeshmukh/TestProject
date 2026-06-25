@@ -1,98 +1,72 @@
+# liberty-lint
 
-This readme file provides a brief overview of the file and folder structure
-included in the default MontageJS project directory.
+A Python tool that parses Synopsys Liberty (`.lib`) standard-cell files,
+loads the data into a SQLite database, and runs lint checks against it —
+with a focus on CCS (`output_current_rise`/`output_current_fall`) current
+waveform tables, plus a few NLDM table-lookup checks.
 
->IMPORTANT: Be sure to replace the contents of this readme file with information
-about the final application before deploying the application or passing it on to
-a client.
+## How it works
 
-Project Directory
-============
+1. **Parse** — `.lib` text is parsed into a generic `Group`/`Attribute` tree
+   using the [`liberty-parser`](https://pypi.org/project/liberty-parser/)
+   package.
+2. **Ingest** (`liberty_lint/ingest.py`) — the tree is walked and loaded into
+   a relational schema (`liberty_lint/models.py`, SQLAlchemy ORM):
+   `Library -> Cell -> Pin -> TimingArc -> {NLDMTable, CCSTable -> CCSVector}`.
+   Index/value arrays are stored as JSON columns alongside precomputed
+   length columns (e.g. `num_index_3_samples`, `num_value_samples`), so the
+   most common questions can be answered directly in SQL.
+3. **Check** (`liberty_lint/checks/`) — each rule is a small class that
+   queries the database for one specific defect. Results can be printed and
+   are also persisted to a `check_result` table.
 
-The default project directory includes the following files and folders:
+## Setup
 
-* assets/  -  Contains global stylesheets and images for the application.
-* index.html  -  Is the entry-point document for the application.
-* node_modules/  -  Contains the code dependencies required in development.
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+```
 
-    Includes Montage, the core framework, and Digit, a mobile-optimized user
-    interface widget set by default. Since MontageJS uses the CommonJS module
-    system, you can leverage the npm ecosystem for additional modules. To add
-    dependencies (e.g., foo), use `npm install foo` in the project directory.
+## Usage
 
-    NOTE: All packages in this directory must be included as dependencies
-    in package.json.
+```bash
+# Parse a .lib file into the database (default: sqlite:///liberty.db)
+liberty-lint ingest path/to/cells.lib
 
-* package.json  -  Describes the application and the dependencies included in
-            the node_modules directory.
-* README.md  -  The default readme file.
-* run-tests.html  -  Is a page to run Jasmine tests manually in the browser.
-* test/  -  Contains tests for the application.
+# Run all checks against the ingested library
+liberty-lint check --library-name my_lib
 
-    By default, this directory includes all.js, a module that points the test runner
-    to all jasmine specs.
+# Run a subset of rules
+liberty-lint check --library-name my_lib --rules CCS001,CCS002
 
-* ui/  -  Contains the application user interface components.
+# List available rules
+liberty-lint list-checks
+```
 
-    By default, this directory contains one component: main.reel (the Main
-    user interface component)
+`check` exits non-zero if any error-severity violation is found, so it can
+be used as a CI gate.
 
-In development, you can expand this project directory as necessary; for example,
-depending on the project you may want to add the following folders:
+## Checks
 
-* locale/  -  For localized content.
-* scripts/  -  For JS libraries that do not support the CommonJS exports object
-           and, therefore, have to be loaded using a `<script>` tag.
+| Rule    | Severity | Description |
+|---------|----------|--------------------------------------------------------------|
+| CCS001  | error    | A CCS vector's `index_3` (time) sample count must equal its `values` (current) sample count. |
+| CCS002  | warning  | All vectors in one CCS table should share the same sample count. |
+| CCS003  | error    | A CCS table must have exactly one vector per `(index_1, index_2)` grid point — no missing or duplicate combinations. |
+| CCS004  | error    | `index_1`/`index_2` grids and each vector's `index_3` time axis must be strictly increasing. |
+| CCS005  | warning  | A vector's time axis should start at a non-negative value. |
+| CCS006  | error    | Current waveform samples must be finite (no NaN/Inf). |
+| NLDM001 | error    | An NLDM table's `values` matrix shape must match its `index_1`/`index_2` lengths. |
+| NLDM002 | error    | NLDM `index_1`/`index_2` grids must be strictly increasing. |
 
-Unit Testing
-=========
+New checks are added by subclassing `liberty_lint.checks.base.Check` and
+registering the instance in `ALL_CCS_CHECKS`/`ALL_NLDM_CHECKS`.
 
-MontageJS uses some pure unit tests that are straightforward [Jasmine specs][1].
+## Tests
 
-To install the test code, run `npm install` in your project folder. This installs the
-the [montage-testing][2] package, which adds some useful utilities for writing
-jasmine tests. You will need the file run-tests.html.
+```bash
+pytest tests/
+```
 
-For an example of how we implement unit testing, see the [digit][3] repository:
-
-* [run-tests][4] loads our test environment.
-* `data-module="test/all"` inside the final script tag tells the system to load [test/all.js][5].
-* all.js specifies a list of module ids for the runner to execute.
-
->Note that in this example, all the tests load a page in an iframe using
-`TestPageLoader.queueTest()`. These are akin to integration tests since they test
-the component in a real environment.
-
-We also test some components by [mocking their dependencies][6].
-
-Documentation
-============
-
-Here are some links you may find helpful:
-
-* [API Reference][7]
-* [Documentation][8]
-* [FAQ][9]
-
-Contact
-======
-
-* Got questions? Join us on [irc.freenode.net#montage][10].
-* Got feedback or want to report a bug? Let us know by creating a new [Github issue][11].
-* Want to contribute? [Pull-requests][12] are more than welcome.
-
-[1]: https://github.com/montagejs/montage/blob/master/test/core/super-spec.js        "Jasmine specs"
-[2]: https://github.com/montagejs/montage-testing        "montage-testing"
-[3]: https://github.com/montagejs/digit        "digit"
-[4]: https://github.com/montagejs/digit/blob/master/run-tests.html        "run-tests"
-[5]: https://github.com/montagejs/digit/tree/master/test        "test/all.js"
-[6]: https://github.com/montagejs/montage/blob/master/test/base/abstract-button-spec.js        "mocking their dependencies"
-[7]: http://montagejs.org/api/        "API Reference"
-[8]: http://montagejs.org/docs/        "Documentation"
-[9]: http://montagejs.org/docs/faq.html        "FAQ"
-[10]: http://webchat.freenode.net/?channels=montage        "irc.freenode.net#montage"
-[11]: https://github.com/montagejs/montage/issues        "Github issue"
-[12]: https://github.com/montagejs/montage/pulls        "Pull-requests"
-
-Last edited: November 14, 2013
-
+`tests/fixtures/sample.lib` is a small synthetic library with a "good" and
+a "bad" cell for both NLDM and CCS, used to exercise every check.

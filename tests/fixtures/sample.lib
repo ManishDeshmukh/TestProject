@@ -1,0 +1,150 @@
+library (synth_lib) {
+  technology (cmos);
+  delay_model : table_lookup;
+  time_unit : "1ns";
+  voltage_unit : "1V";
+  current_unit : "1mA";
+  nom_process : 1;
+  nom_voltage : 1.05;
+  nom_temperature : 25;
+
+  cell (GOOD_INV) {
+    area : 1.0;
+    cell_leakage_power : 0.001;
+    pin (A) {
+      direction : input;
+      capacitance : 0.001;
+    }
+    pin (Y) {
+      direction : output;
+      function : "A'";
+      timing () {
+        related_pin : "A";
+        timing_sense : negative_unate;
+        cell_rise (delay_template_2x2) {
+          index_1 ("0.01, 0.05");
+          index_2 ("0.01, 0.1");
+          values ("0.02, 0.03", \
+                  "0.04, 0.05");
+        }
+        cell_fall (delay_template_2x2) {
+          index_1 ("0.01, 0.05");
+          index_2 ("0.01, 0.1");
+          values ("0.02, 0.03", \
+                  "0.04, 0.05");
+        }
+      }
+    }
+  }
+
+  cell (BAD_INV) {
+    area : 1.0;
+    pin (A) {
+      direction : input;
+      capacitance : 0.001;
+    }
+    pin (Y) {
+      direction : output;
+      function : "A'";
+      timing () {
+        related_pin : "A";
+        timing_sense : negative_unate;
+        cell_rise (delay_template_2x2) {
+          index_1 ("0.01, 0.05, 0.2");
+          index_2 ("0.1, 0.01");
+          values ("0.02, 0.03", \
+                  "0.04, 0.05");
+        }
+      }
+    }
+  }
+
+  cell (GOOD_BUF) {
+    area : 2.0;
+    pin (A) {
+      direction : input;
+      capacitance : 0.002;
+    }
+    pin (Y) {
+      direction : output;
+      function : "A";
+      timing () {
+        related_pin : "A";
+        timing_sense : positive_unate;
+        output_current_rise () {
+          index_1 ("0.01, 0.05");
+          index_2 ("0.01, 0.1");
+          vector ("v0") {
+            index_1 ("0.01");
+            index_2 ("0.01");
+            reference_time : 0.0;
+            index_3 ("0, 0.01, 0.02, 0.03");
+            values ("0.0, 0.5, 0.8, 1.0");
+          }
+          vector ("v1") {
+            index_1 ("0.01");
+            index_2 ("0.1");
+            reference_time : 0.0;
+            index_3 ("0, 0.01, 0.02, 0.03");
+            values ("0.0, 0.4, 0.7, 0.9");
+          }
+          vector ("v2") {
+            index_1 ("0.05");
+            index_2 ("0.01");
+            reference_time : 0.0;
+            index_3 ("0, 0.01, 0.02, 0.03");
+            values ("0.0, 0.3, 0.6, 0.85");
+          }
+          vector ("v3") {
+            index_1 ("0.05");
+            index_2 ("0.1");
+            reference_time : 0.0;
+            index_3 ("0, 0.01, 0.02, 0.03");
+            values ("0.0, 0.2, 0.5, 0.8");
+          }
+        }
+      }
+    }
+  }
+
+  cell (BAD_BUF) {
+    area : 2.0;
+    pin (A) {
+      direction : input;
+      capacitance : 0.002;
+    }
+    pin (Y) {
+      direction : output;
+      function : "A";
+      timing () {
+        related_pin : "A";
+        timing_sense : positive_unate;
+        output_current_rise () {
+          index_1 ("0.01, 0.05");
+          index_2 ("0.1, 0.01");
+          vector ("v0") {
+            index_1 ("0.01");
+            index_2 ("0.01");
+            reference_time : 0.0;
+            index_3 ("0, 0.01, 0.02, 0.03");
+            values ("0.0, 0.5, 0.8");
+          }
+          vector ("v1") {
+            index_1 ("0.01");
+            index_2 ("0.1");
+            reference_time : 0.0;
+            index_3 ("0, 0.02, 0.01, 0.03, 0.04");
+            values ("0.0, 0.4, 0.7, 0.9, 1.1e400");
+          }
+          vector ("v0_dup") {
+            index_1 ("0.01");
+            index_2 ("0.01");
+            reference_time : 0.0;
+            index_3 ("-0.01, 0.01, 0.02");
+            values ("0.0, 0.5, 0.8");
+          }
+        }
+      }
+    }
+  }
+}
