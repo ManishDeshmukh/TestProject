@@ -5,6 +5,7 @@ from .db import make_session
 from .ingest import ingest_file
 from .checks import run_checks, ALL_CHECKS
 from .models import Library
+from . import report as report_module
 
 
 def cmd_ingest(args):
@@ -14,14 +15,18 @@ def cmd_ingest(args):
         print(f"ingested library '{lib.name}' (id={lib.id}) from {args.lib_file}")
 
 
+def _resolve_library_id(session, args):
+    if args.library_id is not None:
+        return args.library_id
+    if args.library_name:
+        lib = session.query(Library).filter(Library.name == args.library_name).one()
+        return lib.id
+    return None
+
+
 def cmd_check(args):
     session = make_session(args.db)
-
-    library_id = args.library_id
-    if library_id is None and args.library_name:
-        lib = session.query(Library).filter(Library.name == args.library_name).one()
-        library_id = lib.id
-
+    library_id = _resolve_library_id(session, args)
     rule_ids = args.rules.split(",") if args.rules else None
     violations = run_checks(session, library_id=library_id, rule_ids=rule_ids)
 
@@ -34,6 +39,15 @@ def cmd_check(args):
     print(f"\n{len(errors)} error(s), {len(warnings)} warning(s)")
     if errors:
         sys.exit(1)
+
+
+def cmd_report(args):
+    session = make_session(args.db)
+    library_id = _resolve_library_id(session, args)
+
+    writer = report_module.write_html if args.format == "html" else report_module.write_csv
+    count = writer(session, args.output, library_id=library_id)
+    print(f"wrote {count} result(s) to {args.output}")
 
 
 def cmd_list_checks(args):
@@ -55,6 +69,13 @@ def main(argv=None):
     p_check.add_argument("--library-name", default=None)
     p_check.add_argument("--rules", default=None, help="Comma-separated rule IDs, e.g. CCS001,CCS002")
     p_check.set_defaults(func=cmd_check)
+
+    p_report = sub.add_parser("report", help="Write a report from previously persisted check results")
+    p_report.add_argument("--library-id", type=int, default=None)
+    p_report.add_argument("--library-name", default=None)
+    p_report.add_argument("--format", choices=["csv", "html"], default="csv")
+    p_report.add_argument("--output", required=True)
+    p_report.set_defaults(func=cmd_report)
 
     p_list = sub.add_parser("list-checks", help="List all available check rules")
     p_list.set_defaults(func=cmd_list_checks)

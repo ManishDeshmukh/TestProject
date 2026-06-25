@@ -165,6 +165,70 @@ class CCSValuesFiniteCheck(Check):
         return violations
 
 
+class CCSCausalityCheck(Check):
+    """A vector's current waveform should start near the quiescent baseline (~0), not mid-swing."""
+
+    rule_id = "CCS007"
+    severity = "warning"
+    description = "CCS vector current should start near zero relative to its peak (causality)."
+    relative_tolerance = 0.05
+
+    def run(self, session, library_id=None):
+        violations = []
+        for table in _ccs_table_query(session, library_id):
+            for vector in table.vectors:
+                values = vector.values or []
+                if len(values) < 2:
+                    continue
+                peak = max(abs(v) for v in values)
+                if peak == 0:
+                    continue
+                if abs(values[0]) / peak > self.relative_tolerance:
+                    violations.append(self.violation(
+                        "ccs_vector", vector.id, _label(table),
+                        f"vector[{vector.vector_index}] starts at {values[0]:.4g}, "
+                        f"which is {abs(values[0]) / peak:.0%} of its peak "
+                        f"({peak:.4g}) instead of a near-zero baseline",
+                    ))
+        return violations
+
+
+class CCSRiseFallGridConsistencyCheck(Check):
+    """output_current_rise and output_current_fall on the same arc should share the same index_1/index_2 grid."""
+
+    rule_id = "CCS008"
+    severity = "warning"
+    description = "CCS rise and fall tables on the same timing arc should use the same index_1/index_2 grid."
+
+    def run(self, session, library_id=None):
+        violations = []
+        arcs_query = session.query(TimingArc).join(Pin, TimingArc.pin_id == Pin.id).join(
+            Cell, Pin.cell_id == Cell.id
+        )
+        if library_id is not None:
+            arcs_query = arcs_query.filter(Cell.library_id == library_id)
+
+        for arc in arcs_query:
+            by_type = {t.table_type: t for t in arc.ccs_tables}
+            rise = by_type.get("output_current_rise")
+            fall = by_type.get("output_current_fall")
+            if rise is None or fall is None:
+                continue
+            if rise.index_1 != fall.index_1:
+                violations.append(self.violation(
+                    "timing_arc", arc.id, _label(rise),
+                    f"output_current_rise index_1 {rise.index_1} differs from "
+                    f"output_current_fall index_1 {fall.index_1}",
+                ))
+            if rise.index_2 != fall.index_2:
+                violations.append(self.violation(
+                    "timing_arc", arc.id, _label(rise),
+                    f"output_current_rise index_2 {rise.index_2} differs from "
+                    f"output_current_fall index_2 {fall.index_2}",
+                ))
+        return violations
+
+
 ALL_CCS_CHECKS = [
     CCSSampleCountMatchCheck(),
     CCSUniformSampleCountCheck(),
@@ -172,4 +236,6 @@ ALL_CCS_CHECKS = [
     CCSIndexMonotonicityCheck(),
     CCSTimeOriginCheck(),
     CCSValuesFiniteCheck(),
+    CCSCausalityCheck(),
+    CCSRiseFallGridConsistencyCheck(),
 ]

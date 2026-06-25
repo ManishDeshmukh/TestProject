@@ -81,6 +81,20 @@ def test_nldm002_monotonicity_detected(session_and_lib):
     assert "BAD_INV" in violations[0].object_label
 
 
+def test_ccs007_causality_detected(session_and_lib):
+    session, lib = session_and_lib
+    violations = run_checks(session, library_id=lib.id, rule_ids=["CCS007"], persist=False)
+    assert len(violations) == 1
+    assert "BAD_BUF" in violations[0].object_label
+
+
+def test_ccs008_rise_fall_grid_mismatch_detected(session_and_lib):
+    session, lib = session_and_lib
+    violations = run_checks(session, library_id=lib.id, rule_ids=["CCS008"], persist=False)
+    assert len(violations) == 2
+    assert all("BAD_BUF" in v.object_label for v in violations)
+
+
 def test_persisted_check_results_written(session_and_lib):
     session, lib = session_and_lib
     run_checks(session, library_id=lib.id, persist=True)
