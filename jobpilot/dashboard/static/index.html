@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<!--
+  JobPilot Dashboard — single self-contained file (P1: air-gap safe).
+  All CSS + JS inlined. No CDN. No npm. Served by FastAPI / stdlib fallback.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>JobPilot</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --border:#30363d;
+    --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950;
+    --yellow:#d29922; --red:#f85149; --purple:#bc8cff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+       background:var(--bg);color:var(--text);font-size:14px}
+  header{display:flex;align-items:center;gap:16px;padding:12px 20px;
+         background:var(--panel);border-bottom:1px solid var(--border)}
+  header h1{font-size:18px;margin:0;letter-spacing:.5px}
+  header .badge{font-size:12px;color:var(--muted)}
+  .tabs{display:flex;gap:4px;padding:0 12px;background:var(--panel);border-bottom:1px solid var(--border)}
+  .tab{padding:10px 16px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent}
+  .tab.active{color:var(--text);border-bottom-color:var(--accent)}
+  .view{display:none;padding:18px 20px}
+  .view.active{display:block}
+  .grid{display:grid;gap:14px}
+  .cards{grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px}
+  .panel h3{margin:0 0 10px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .stat{font-size:26px;font-weight:600}
+  .stat-label{font-size:12px;color:var(--muted)}
+  .bar{height:8px;border-radius:4px;background:var(--panel2);overflow:hidden;margin-top:4px}
+  .bar > div{height:100%;border-radius:4px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:500}
+  .pill{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+  .s-RUN{background:#1f6feb33;color:var(--accent)}
+  .s-PEND{background:#d2992233;color:var(--yellow)}
+  .s-DONE{background:#3fb95033;color:var(--green)}
+  .s-EXIT,.s-FAILED_FINAL,.s-FAILED_BUDGET{background:#f8514933;color:var(--red)}
+  .s-RESTARTED{background:#bc8cff33;color:var(--purple)}
+  .s-WARNED{background:#d2992233;color:var(--yellow)}
+  .risk-LOW{color:var(--green)} .risk-MEDIUM{color:var(--yellow)}
+  .risk-HIGH,.risk-BLOCKED,.risk-CRITICAL{color:var(--red)} .risk-WARNING{color:var(--yellow)}
+  .child{padding-left:22px;color:var(--muted)}
+  .muted{color:var(--muted)}
+  .row{display:flex;justify-content:space-between;align-items:center;margin:6px 0;gap:8px}
+  .feed{max-height:240px;overflow:auto}
+  .feed .item{padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
+  canvas{background:var(--panel2);border-radius:6px;width:100%}
+  /* chat */
+  #chatlog{height:340px;overflow:auto;background:var(--panel2);border-radius:8px;padding:12px}
+  .msg{margin:8px 0;padding:8px 12px;border-radius:10px;max-width:80%;line-height:1.4}
+  .msg.user{background:#1f6feb33;margin-left:auto}
+  .msg.bot{background:var(--panel)}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+  .chip{padding:6px 12px;background:var(--panel);border:1px solid var(--border);
+        border-radius:16px;cursor:pointer;font-size:12px}
+  .chip:hover{border-color:var(--accent)}
+  #chatbox{display:flex;gap:8px;margin-top:10px}
+  #chatinput{flex:1;padding:10px;background:var(--panel);border:1px solid var(--border);
+             border-radius:8px;color:var(--text)}
+  button.send{padding:10px 18px;background:var(--accent);border:none;border-radius:8px;
+              color:#04101f;font-weight:600;cursor:pointer}
+  .pager{display:flex;gap:8px;align-items:center;margin-top:10px}
+  .pager button{padding:5px 10px;background:var(--panel);border:1px solid var(--border);
+                border-radius:6px;color:var(--text);cursor:pointer}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ JobPilot</h1>
+  <span class="badge" id="hdr">connecting…</span>
+  <span class="badge" id="lic"></span>
+</header>
+<div class="tabs">
+  <div class="tab active" data-v="live">⚡ Live Jobs</div>
+  <div class="tab" data-v="analytics">📊 Analytics</div>
+  <div class="tab" data-v="agents">🤖 Agents</div>
+  <div class="tab" data-v="history">📋 History</div>
+  <div class="tab" data-v="chat">💬 Chat</div>
+</div>
+
+<!-- TAB 1: LIVE -->
+<div class="view active" id="live">
+  <div class="grid cards" id="summary"></div>
+  <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:14px">
+    <div class="panel"><h3>Queue Load (top 5)</h3><div id="queues"></div></div>
+    <div class="panel"><h3>Disk Usage (top 5)</h3><div id="disks"></div></div>
+  </div>
+  <div class="panel" id="licPanel" style="margin-top:14px;display:none">
+    <h3>License Availability</h3><div id="licenses"></div>
+  </div>
+  <div class="panel" id="warnPanel" style="margin-top:14px;display:none">
+    <h3>⚠ Early Warnings</h3><div id="warnings"></div>
+  </div>
+  <div class="grid" style="grid-template-columns:2fr 1fr;margin-top:14px">
+    <div class="panel"><h3>Job Tree</h3><div id="jobs"></div>
+      <div class="pager"><button onclick="pageDelta(-1)">‹ Prev</button>
+        <span id="pageinfo" class="muted"></span>
+        <button onclick="pageDelta(1)">Next ›</button></div></div>
+    <div class="panel"><h3>LLM Failure Feed</h3><div class="feed" id="analysis"></div></div>
+  </div>
+</div>
+
+<!-- TAB 2: ANALYTICS -->
+<div class="view" id="analytics">
+  <div class="grid cards" id="kpis"></div>
+  <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:14px">
+    <div class="panel"><h3>Failure Categories</h3><canvas id="cFail" height="160"></canvas></div>
+    <div class="panel"><h3>Queue Distribution</h3><canvas id="cQueue" height="160"></canvas></div>
+  </div>
+  <div class="panel" style="margin-top:14px"><h3>TAT Breakdown — Compute vs License Wait</h3>
+    <canvas id="cTat" height="120"></canvas></div>
+</div>
+
+<!-- TAB 3: AGENTS -->
+<div class="view" id="agents">
+  <div class="panel"><h3>Agent Network</h3><canvas id="cAgents" height="260"></canvas></div>
+  <div class="panel" style="margin-top:14px"><h3>Agent Status</h3>
+    <table><thead><tr><th>Agent</th><th>Status</th><th>Last action</th>
+      <th>Handled</th><th>Errors</th><th>Latency</th></tr></thead>
+      <tbody id="agentRows"></tbody></table></div>
+</div>
+
+<!-- TAB 4: HISTORY -->
+<div class="view" id="history">
+  <div class="panel"><h3>Job History</h3>
+    <table><thead><tr><th>Job</th><th>Name</th><th>Tool</th><th>Queue</th><th>Status</th>
+      <th>Compute</th><th>Lic wait</th><th>Mem peak</th><th>Restarts</th><th>RCA</th></tr></thead>
+      <tbody id="histRows"></tbody></table>
+    <div class="pager"><button onclick="histDelta(-1)">‹ Prev</button>
+      <span id="histinfo" class="muted"></span>
+      <button onclick="histDelta(1)">Next ›</button></div></div>
+</div>
+
+<!-- TAB 5: CHAT -->
+<div class="view" id="chat">
+  <div class="panel">
+    <h3>JobPilot Assistant</h3>
+    <div class="chips" id="chips"></div>
+    <div id="chatlog"></div>
+    <div id="chatbox">
+      <input id="chatinput" placeholder="Ask about jobs, failures, licenses…"
+             onkeydown="if(event.key==='Enter')sendChat()"/>
+      <button class="send" onclick="sendChat()">Send</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Single-instance enforcement (P7) ────────────────────────────────────────
+const bc = ('BroadcastChannel' in window) ? new BroadcastChannel('jobpilot_dashboard') : null;
+if(bc){
+  let gotPong=false;
+  bc.onmessage=(e)=>{ if(e.data==='ping'){bc.postMessage('pong')} if(e.data==='pong'){gotPong=true} };
+  bc.postMessage('ping');
+  setTimeout(()=>{ if(gotPong){ document.body.innerHTML=
+    '<div style="padding:40px;text-align:center">JobPilot is already open in another tab.</div>'; } }, 800);
+}
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+let page=1, histPage=1, licenseLevel=0;
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active'); document.getElementById(t.dataset.v).classList.add('active');
+  if(t.dataset.v==='analytics') loadAnalytics();
+  if(t.dataset.v==='history') loadHistory();
+});
+function pageDelta(d){ page=Math.max(1,page+d); pollAll(); }
+function histDelta(d){ histPage=Math.max(1,histPage+d); loadHistory(); }
+
+const j = (r)=>r.json();
+function pct(n){ return Math.min(100,Math.max(0,n||0)); }
+function barColor(p){ return p>85?'var(--red)':p>65?'var(--yellow)':'var(--green)'; }
+
+// ── Live polling (Promise.all, 3s) ───────────────────────────────────────────
+async function pollAll(){
+  try{
+    const [s,q,d,l,jb,an,w,ag] = await Promise.all([
+      fetch('/api/summary').then(j), fetch('/api/queues').then(j),
+      fetch('/api/disks').then(j), fetch('/api/licenses').then(j),
+      fetch('/api/jobs?page='+page).then(j), fetch('/api/analysis?limit=8').then(j),
+      fetch('/api/warnings').then(j), fetch('/api/agents').then(j),
+    ]);
+    renderSummary(s); renderQueues(q); renderDisks(d); renderLicenses(l);
+    renderJobs(jb); renderAnalysis(an); renderWarnings(w); renderAgents(ag);
+  }catch(e){ document.getElementById('hdr').textContent='reconnecting…'; }
+}
+
+function renderSummary(s){
+  licenseLevel=s.license_level;
+  document.getElementById('hdr').textContent=`${s.user}@${s.host} · pid ${s.coordinator_pid}`;
+  document.getElementById('lic').textContent='License level: '+s.license_level;
+  const cards=[['TOTAL',s.total],['PENDING',s.pending],['RUNNING',s.running],
+    ['DONE',s.done],['FAILED',s.failed],['↻ RETRY',s.restarted],['⚡ WARN',s.warnings]];
+  document.getElementById('summary').innerHTML=cards.map(c=>
+    `<div class="panel"><div class="stat">${c[1]}</div><div class="stat-label">${c[0]}</div></div>`).join('');
+}
+function renderQueues(qs){
+  document.getElementById('queues').innerHTML = qs.length? qs.map(q=>{
+    const p=pct(q.load_pct);
+    return `<div class="row"><span>${q.name} <span class="muted">(${q.running}R/${q.pending}P)</span></span>
+      <span>${p.toFixed(0)}%</span></div><div class="bar"><div style="width:${p}%;background:${barColor(p)}"></div></div>`;
+  }).join('') : '<div class="muted">No queue data yet.</div>';
+}
+function renderDisks(ds){
+  document.getElementById('disks').innerHTML = ds.length? ds.map(d=>{
+    const p=pct(d.util_pct);
+    return `<div class="row"><span>${d.mount}</span><span>${d.used_gb}/${d.total_gb} GB · ${p.toFixed(0)}%</span></div>
+      <div class="bar"><div style="width:${p}%;background:${barColor(p)}"></div></div>`;
+  }).join('') : '<div class="muted">No disk data yet.</div>';
+}
+function renderLicenses(ls){
+  const panel=document.getElementById('licPanel');
+  if(licenseLevel<1 || !ls.length){ panel.style.display='none'; return; }
+  panel.style.display='block';
+  document.getElementById('licenses').innerHTML = ls.map(l=>{
+    const p=pct(l.util_pct);
+    return `<div class="row"><span>${l.feature}</span>
+      <span><span class="risk-${l.risk}">${l.risk}</span> · ${l.available}/${l.total} free</span></div>
+      <div class="bar"><div style="width:${p}%;background:${barColor(p)}"></div></div>`;
+  }).join('');
+}
+function renderJobs(data){
+  document.getElementById('pageinfo').textContent=`Page ${data.page}/${data.pages} · ${data.total} roots`;
+  if(!data.jobs.length){ document.getElementById('jobs').innerHTML='<div class="muted">No jobs yet. Submit with <code>jp submit</code> or <code>jp demo</code>.</div>'; return; }
+  let rows='<table><thead><tr><th>Job</th><th>Tool</th><th>Queue</th><th>Status</th><th>Mem peak</th><th>↻</th></tr></thead><tbody>';
+  data.jobs.forEach(jb=>{ rows+=jobRow(jb,false);
+    (jb.children||[]).forEach(c=>rows+=jobRow(c,true)); });
+  document.getElementById('jobs').innerHTML=rows+'</tbody></table>';
+}
+function jobRow(jb,child){
+  return `<tr class="${child?'child':''}"><td>${child?'└ ':''}${jb.job_id}</td>
+    <td>${jb.tool||'-'}</td><td>${jb.queue||'-'}</td>
+    <td><span class="pill s-${jb.status}">${jb.status}</span></td>
+    <td>${jb.mem_peak_mb?jb.mem_peak_mb+'MB':'-'}</td><td>${jb.restart_count||0}</td></tr>`;
+}
+function renderAnalysis(an){
+  document.getElementById('analysis').innerHTML = an.length? an.map(a=>
+    `<div class="item"><b>${a.job_id}</b> <span class="muted">${a.tool||''}</span><br>
+     <span class="risk-HIGH">${a.error_category}</span> ${a.license_contributed?'🔑':''}
+     <span class="muted">(${a.confidence})</span><br>${a.root_cause||''}</div>`).join('')
+    : '<div class="muted">No failures analysed yet.</div>';
+}
+function renderWarnings(w){
+  const panel=document.getElementById('warnPanel');
+  if(!w.length){ panel.style.display='none'; return; }
+  panel.style.display='block';
+  document.getElementById('warnings').innerHTML = w.map(x=>
+    `<div class="row"><span><b>${x.job_id}</b> ${x.tool||''}
+      <span class="risk-${x.risk_level}">${x.risk_level}</span></span>
+     <span class="muted">mem ${x.mem_util_pct}% · ETA ${x.eta_to_limit_min??'?'}min
+      · suggest ${x.suggested_mem_mb||'-'}MB</span></div>`).join('');
+}
+function renderAgents(ag){
+  document.getElementById('agentRows').innerHTML = ag.map(a=>
+    `<tr><td>${a.name}</td><td><span class="risk-${a.status==='active'?'LOW':'HIGH'}">${a.status}</span></td>
+     <td class="muted">${a.last_action}</td><td>${a.jobs_handled}</td>
+     <td>${a.errors}</td><td>${a.avg_latency_ms}ms</td></tr>`).join('');
+  drawAgentNet(ag);
+}
+
+// ── Analytics ────────────────────────────────────────────────────────────────
+async function loadAnalytics(){
+  const a = await fetch('/api/analytics').then(j);
+  const kpis=[['SUCCESS RATE',a.success_rate+'%'],['AVG TAT',a.avg_tat_min+'m'],
+    ['TOP FAIL',a.top_fail_reason],['AUTO-RECOVERED',a.auto_recovered]];
+  document.getElementById('kpis').innerHTML=kpis.map(c=>
+    `<div class="panel"><div class="stat" style="font-size:20px">${c[1]}</div><div class="stat-label">${c[0]}</div></div>`).join('');
+  barChart('cFail', a.fail_cats, 'var(--red)');
+  barChart('cQueue', a.queue_dist, 'var(--accent)');
+  stackedTat('cTat', a.tat_breakdown);
+}
+function barChart(id, obj, color){
+  const c=document.getElementById(id), ctx=c.getContext('2d');
+  c.width=c.clientWidth; ctx.clearRect(0,0,c.width,c.height);
+  const keys=Object.keys(obj||{}); if(!keys.length){ ctx.fillStyle='#8b949e'; ctx.fillText('No data',10,20); return; }
+  const max=Math.max(...keys.map(k=>obj[k])), bw=c.width/keys.length;
+  keys.forEach((k,i)=>{ const h=(obj[k]/max)*(c.height-30);
+    ctx.fillStyle=color; ctx.fillRect(i*bw+8,c.height-h-18,bw-16,h);
+    ctx.fillStyle='#e6edf3'; ctx.font='10px sans-serif';
+    ctx.fillText(k.substring(0,8),i*bw+8,c.height-4); ctx.fillText(obj[k],i*bw+8,c.height-h-22);});
+}
+function stackedTat(id,t){
+  const c=document.getElementById(id), ctx=c.getContext('2d'); c.width=c.clientWidth;
+  ctx.clearRect(0,0,c.width,c.height);
+  const total=(t.compute_sec||0)+(t.license_wait_sec||0);
+  if(!total){ ctx.fillStyle='#8b949e'; ctx.fillText('No license-decomposed data yet',10,20); return; }
+  const cw=(t.compute_sec/total)*(c.width-20), lw=(t.license_wait_sec/total)*(c.width-20);
+  ctx.fillStyle='var(--green)'; ctx.fillRect(10,40,cw,40);
+  ctx.fillStyle='var(--yellow)'; ctx.fillRect(10+cw,40,lw,40);
+  ctx.fillStyle='#e6edf3'; ctx.font='12px sans-serif';
+  ctx.fillText('Compute '+Math.round(t.compute_sec/60)+'m',10,30);
+  ctx.fillText('License wait '+Math.round(t.license_wait_sec/60)+'m',10+cw,100);
+}
+function drawAgentNet(ag){
+  const c=document.getElementById('cAgents'), ctx=c.getContext('2d');
+  c.width=c.clientWidth; const W=c.width,H=c.height; ctx.clearRect(0,0,W,H);
+  const cx=W/2, cy=H/2, R=Math.min(W,H)/2-40;
+  const peers=ag.filter(a=>a.name!=='Coordinator');
+  peers.forEach((a,i)=>{ const ang=(i/peers.length)*Math.PI*2;
+    const x=cx+R*Math.cos(ang), y=cy+R*Math.sin(ang);
+    ctx.strokeStyle='#30363d'; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(x,y); ctx.stroke();
+    ctx.fillStyle=a.errors>0?'var(--red)':'var(--accent)'; ctx.beginPath(); ctx.arc(x,y,8,0,7); ctx.fill();
+    ctx.fillStyle='#e6edf3'; ctx.font='10px sans-serif'; ctx.textAlign='center';
+    ctx.fillText(a.name.replace('Agent',''),x,y+22); });
+  ctx.fillStyle='var(--green)'; ctx.beginPath(); ctx.arc(cx,cy,14,0,7); ctx.fill();
+  ctx.fillStyle='#e6edf3'; ctx.fillText('Coordinator',cx,cy-22);
+}
+
+// ── History ──────────────────────────────────────────────────────────────────
+async function loadHistory(){
+  const h = await fetch('/api/history?page='+histPage).then(j);
+  document.getElementById('histinfo').textContent=`Page ${h.page}/${h.pages} · ${h.total} jobs`;
+  document.getElementById('histRows').innerHTML = h.jobs.map(r=>
+    `<tr><td>${r.job_id}</td><td>${r.name||'-'}</td><td>${r.tool||'-'}</td><td>${r.queue||'-'}</td>
+     <td><span class="pill s-${r.status}">${r.status}</span></td>
+     <td>${r.compute_time?Math.round(r.compute_time/60)+'m':'-'}</td>
+     <td>${r.license_wait?Math.round(r.license_wait/60)+'m':'-'}</td>
+     <td>${r.mem_peak?r.mem_peak+'MB':'-'}</td><td>${r.restarts||0}</td>
+     <td>${r.rca||'-'}</td></tr>`).join('') || '<tr><td colspan=10 class="muted">No history.</td></tr>';
+}
+
+// ── Chat (WebSocket with HTTP POST fallback) ─────────────────────────────────
+const session='dash-'+Math.random().toString(36).slice(2,8);
+let socket=null;
+const CHIPS=['running jobs','failed jobs','why did the last job fail','queue load','license status','help'];
+document.getElementById('chips').innerHTML=CHIPS.map(c=>`<span class="chip" onclick="chip('${c}')">${c}</span>`).join('');
+function chip(t){ document.getElementById('chatinput').value=t; sendChat(); }
+function addMsg(text,cls){ const d=document.createElement('div'); d.className='msg '+cls; d.textContent=text;
+  const log=document.getElementById('chatlog'); log.appendChild(d); log.scrollTop=log.scrollHeight; return d; }
+function connectWS(){
+  try{ socket=new WebSocket(`ws://${location.host}/ws/chat`);
+    socket.onmessage=(e)=>{ const m=JSON.parse(e.data);
+      if(m.type==='start'){ window._bot=addMsg('','bot'); }
+      else if(m.type==='token' && window._bot){ window._bot.textContent+=m.token; }
+    };
+    socket.onerror=()=>{ socket=null; };
+  }catch(e){ socket=null; }
+}
+connectWS();
+async function sendChat(){
+  const inp=document.getElementById('chatinput'); const text=inp.value.trim(); if(!text)return;
+  addMsg(text,'user'); inp.value='';
+  if(socket && socket.readyState===1){ socket.send(JSON.stringify({text,session})); return; }
+  const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({text,session})}).then(j);
+  addMsg(r.text,'bot');
+}
+
+pollAll(); setInterval(pollAll,3000);
+</script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+# JobPilot — air-gapped installable dependency set.
+# Install offline:  pip install --no-index --find-links=./jp_packages/ -r requirements.txt
+#
+# NOTE: JobPilot is written stdlib-first. Every package below is an *optional*
+# enhancement — the system runs end-to-end without any of them and lights up the
+# corresponding capability when the package (and its backing service) is present.
+
+# ── Core Framework (dashboard) ───────────────────────────────────────────────
+fastapi==0.111.0
+uvicorn==0.29.0
+pydantic==2.7.0
+
+# ── Database ─────────────────────────────────────────────────────────────────
+sqlalchemy==2.0.30
+alembic==1.13.1
+
+# ── Central DB (central server only) ─────────────────────────────────────────
+psycopg2-binary==2.9.9
+
+# ── LSF + System ─────────────────────────────────────────────────────────────
+psutil==5.9.8
+
+# ── ML / Prediction ──────────────────────────────────────────────────────────
+scikit-learn==1.4.2
+xgboost==2.0.3
+numpy==1.26.4
+pandas==2.2.2
+joblib==1.4.1
+
+# ── LLM Integration ──────────────────────────────────────────────────────────
+ollama==0.2.1
+
+# ── Scheduling ───────────────────────────────────────────────────────────────
+apscheduler==3.10.4
+
+# ── HTTP (sync REST for central sync) ────────────────────────────────────────
+requests==2.31.0
+urllib3==2.2.1
+
+# ── Dashboard + WebSocket ────────────────────────────────────────────────────
+jinja2==3.1.4
+aiofiles==23.2.1
+websockets==12.0
+
+# ── CLI + Output ─────────────────────────────────────────────────────────────
+click==8.1.7
+rich==13.7.1
+python-dotenv==1.0.1
+
+# ── Utilities ────────────────────────────────────────────────────────────────
+python-dateutil==2.9.0
+
+# ── Testing ──────────────────────────────────────────────────────────────────
+pytest==8.2.0
+pytest-asyncio==0.23.6

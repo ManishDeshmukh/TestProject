@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# JobPilot runtime data (lives under data_path, never committed)
+*.db
+*.db-wal
+*.db-shm
+*.pkl
+logs/
+snapshots/
+models/
+.session
+
+# Local virtualenvs
+.venv/
+venv/
